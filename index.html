@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#2a1046" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>MeowMaker</title>
+    <!-- arcade-cabinet type: Fredoka for the chunky display bits, Nunito for UI text.
+         Self-hosted rather than pulled from Google Fonts: a third-party request sits on
+         the critical path to first paint, and fonts.googleapis.com is unreachable in
+         some of the regions CrazyGames serves. The files live in src/fonts and the
+         @font-face rules in style.css, so Vite fingerprints them and emits relative URLs;
+         that also rules out preloading them from here, since the built names are hashed. -->
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <!-- An empty key, purely to balance the settings button so the wordmark stays
+             optically centred. This slot has held a Home link and a restart key in turn;
+             both are gone — the game ships inside a CrazyGames iframe, where navigating
+             away from index.html is broken and disallowed, and restarting lives in the
+             settings sheet where an accidental tap can't wipe a cat mid-build. -->
+        <div class="topbar-slot" aria-hidden="true"></div>
+        <!-- swap the artwork at src/logo.png; it is bundled rather than served from
+             public/ so the stylesheet can mask the wordmark with the same file -->
+        <h1 class="logo">
+          <img class="logo-img" src="./src/logo.png" alt="MeowMaker" onerror="this.remove()" />
+          <span class="logo-text"><span class="logo-a">MEOW</span><span class="logo-b">MAKER</span></span>
+        </h1>
+        <button class="icon-btn" id="settings" title="Shortcuts" aria-label="Shortcuts">
+          <svg class="icon-glyph" viewBox="0 0 24 24" aria-hidden="true">
+            <path fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"
+              d="M10.8946 3.00654C10.2226 1.87704 8.75191 1.45656 7.59248 2.14193L5.86749 3.12906C4.59518 3.85639 4.16378 5.48726 4.8906 6.74522L4.89112 6.74611C5.26606 7.39298 5.20721 7.8062 5.09018 8.00929C4.97308 8.21249 4.64521 8.47001 3.9 8.47001C2.43322 8.47001 1.25 9.66837 1.25 11.12V12.88C1.25 14.3317 2.43322 15.53 3.9 15.53C4.64521 15.53 4.97308 15.7875 5.09018 15.9907C5.20721 16.1938 5.26606 16.607 4.89112 17.2539L4.8906 17.2548C4.16378 18.5128 4.59558 20.1439 5.8679 20.8712L7.59257 21.8581C8.75199 22.5434 10.2226 22.123 10.8946 20.9935L11.0091 20.7958C11.3841 20.1489 11.773 19.9925 12.0087 19.9925C12.2434 19.9925 12.6293 20.1476 12.9993 20.793L13.0009 20.7958L13.1109 20.9858L13.1154 20.9935C13.7874 22.123 15.258 22.5434 16.4174 21.8581L18.1425 20.871C19.4157 20.1431 19.8444 18.5235 19.1212 17.2579L19.1189 17.2539C18.7439 16.607 18.8028 16.1938 18.9198 15.9907C19.0369 15.7875 19.3648 15.53 20.11 15.53C21.5768 15.53 22.76 14.3317 22.76 12.88V11.12C22.76 9.65323 21.5616 8.47001 20.11 8.47001C19.3648 8.47001 19.0369 8.21249 18.9198 8.00929C18.8028 7.8062 18.7439 7.39298 19.1189 6.74611L19.1194 6.74522C19.8463 5.48713 19.4147 3.85604 18.1421 3.12883L16.4175 2.14193C15.2581 1.45656 13.7874 1.877 13.1154 3.00651L13.0009 3.20423C12.6259 3.85115 12.237 4.00751 12.0012 4.00751C11.7666 4.00751 11.3807 3.85247 11.0107 3.20701L11.0091 3.20423L10.8991 3.01421L10.8946 3.00654ZM15 12C15 13.6569 13.6569 15 12 15C10.3431 15 9 13.6569 9 12C9 10.3431 10.3431 9 12 9C13.6569 9 15 10.3431 15 12Z" />
+          </svg>
+        </button>
+      </header>
+
+      <section class="stage">
+        <div class="canvas busy" id="canvas">
+          <div class="art" id="art"></div>
+          <div class="spinner" aria-hidden="true"></div>
+        </div>
+
+        <div class="serial" id="serialPlate">
+          <span>Your cat</span>
+          <b id="serial">#00000</b>
+        </div>
+      </section>
+
+      <section class="picker">
+        <div class="progress" id="progress"><i id="progressFill"></i></div>
+        <nav class="tabs" id="tabs"></nav>
+        <div class="toolbar" id="toolbar"></div>
+        <div class="grid" id="grid"></div>
+      </section>
+
+      <footer class="dock">
+        <!-- the shutter: dark until every category has been styled, then it lights up
+             and saves the finished cat -->
+        <button class="dock-btn" id="dockShot" title="Finish styling first"
+          aria-label="Save photo" disabled>
+          <svg class="dock-cam" viewBox="0 0 48 48" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linejoin="round">
+              <path d="M6 17h8l3.5-5h13L34 17h8a2 2 0 0 1 2 2v18a2 2 0 0 1-2 2H6a2 2
+                0 0 1-2-2V19a2 2 0 0 1 2-2Z" />
+              <circle cx="24" cy="28" r="7.5" />
+            </g>
+          </svg>
+        </button>
+      </footer>
+    </main>
+
+    <!-- the camera flash: a white sheet that blinks once when the shutter fires, so
+         saving the cat feels like a photo being taken rather than a file download -->
+    <div class="flash" id="flash" aria-hidden="true"></div>
+
+    <div class="toast" id="toast" role="status"></div>
+
+    <audio id="music" src="./music-loop.mp3" loop preload="auto"></audio>
+
+    <!-- native <dialog>: Esc-to-close and the backdrop come for free -->
+    <dialog class="sheet" id="settingsSheet" aria-labelledby="sheetTitle">
+      <h2 class="sheet-title" id="sheetTitle">Settings</h2>
+
+      <!-- Both audio rows draw one icon in both states and let CSS strike it through when
+           the switch is off, rather than swapping in a second "muted" drawing — the mark
+           stays put and only gains a slash, which is easier to read at a glance than two
+           silhouettes that differ subtly. The layered opacities are part of the artwork:
+           they're the sound waves and the second note, so they're kept as authored. -->
+      <button class="sheet-row" id="musicToggle" aria-pressed="false">
+        <span class="sheet-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path fill="currentColor" d="M12.75 12.508L21.25 9.108V14.7609C20.7449 14.4375 20.1443
+              14.25 19.5 14.25C17.7051 14.25 16.25 15.7051 16.25 17.5C16.25 19.2949 17.7051 20.75
+              19.5 20.75C21.2949 20.75 22.75 19.2949 22.75 17.5L22.75 7.94625C22.75 6.80342 22.75
+              5.84496 22.6696 5.08131C22.6582 4.97339 22.6448 4.86609 22.63 4.76597C22.5525 4.24426
+              22.4156 3.75757 22.1514 3.35115C22.0193 3.14794 21.8553 2.96481 21.6511 2.80739C21.6128
+              2.77788 21.573 2.74927 21.5319 2.7216L21.5236 2.71608C20.8164 2.2454 20.0213 2.27906
+              19.2023 2.48777C18.4102 2.68961 17.4282 3.10065 16.224 3.60469L14.13 4.48115C13.5655
+              4.71737 13.0873 4.91751 12.712 5.1248C12.3126 5.34535 11.9686 5.60548 11.7106
+              5.99311C11.4527 6.38075 11.3455 6.7985 11.2963 7.25204C11.25 7.67831 11.25 8.19671
+              11.25 8.80858V16.7609C10.7448 16.4375 10.1443 16.25 9.5 16.25C7.70507 16.25 6.25
+              17.7051 6.25 19.5C6.25 21.2949 7.70507 22.75 9.5 22.75C11.2949 22.75 12.75 21.2949
+              12.75 19.5L12.75 12.508Z" />
+            <path fill="currentColor" opacity="0.5" d="M7.75 2C7.75 1.58579 7.41421 1.25 7
+              1.25C6.58579 1.25 6.25 1.58579 6.25 2V7.76091C5.74485 7.4375 5.14432 7.25 4.5
+              7.25C2.70507 7.25 1.25 8.70507 1.25 10.5C1.25 12.2949 2.70507 13.75 4.5 13.75C6.29493
+              13.75 7.75 12.2949 7.75 10.5V5.0045C8.44852 5.50913 9.27955 5.75 10 5.75C10.4142 5.75
+              10.75 5.41421 10.75 5C10.75 4.58579 10.4142 4.25 10 4.25C9.54565 4.25 8.9663 4.07389
+              8.51159 3.69837C8.0784 3.34061 7.75 2.79785 7.75 2Z" />
+          </svg>
+        </span>
+        <span class="sheet-label">Music</span>
+        <span class="switch" aria-hidden="true"><i></i></span>
+      </button>
+
+      <!-- separate from Music on purpose: players who turn the loop off often still want
+           the taps and the shutter, and vice versa -->
+      <button class="sheet-row" id="soundToggle" aria-pressed="false">
+        <span class="sheet-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path fill="currentColor" d="M2.00299 11.7155C2.04033 9.87326 2.059 8.95215 2.67093
+              8.16363C2.78262 8.0197 2.9465 7.8487 3.08385 7.73274C3.83639 7.09741 4.82995 7.09741
+              6.81706 7.09741C7.527 7.09741 7.88197 7.09741 8.22035 7.00452C8.29067 6.98522 8.36024
+              6.96296 8.4289 6.93781C8.75936 6.81674 9.05574 6.60837 9.64851 6.19161C11.9872 4.54738
+              13.1565 3.72527 14.138 4.08241C14.3261 4.15088 14.5083 4.24972 14.671 4.37162C15.5194
+              5.00744 15.5839 6.48675 15.7128 9.44537C15.7606 10.5409 15.7931 11.4785 15.7931
+              12C15.7931 12.5215 15.7606 13.4591 15.7128 14.5546C15.5839 17.5132 15.5194 18.9926
+              14.671 19.6284C14.5083 19.7503 14.3261 19.8491 14.138 19.9176C13.1565 20.2747 11.9872
+              19.4526 9.64851 17.8084C9.05574 17.3916 8.75936 17.1833 8.4289 17.0622C8.36024 17.037
+              8.29067 17.0148 8.22035 16.9955C7.88197 16.9026 7.52701 16.9026 6.81706 16.9026C4.82995
+              16.9026 3.83639 16.9026 3.08385 16.2673C2.9465 16.1513 2.78262 15.9803 2.67093
+              15.8364C2.059 15.0478 2.04033 14.1267 2.00299 12.2845C2.00103 12.1878 2 12.0928 2
+              12C2 11.9072 2.00103 11.8122 2.00299 11.7155Z" />
+            <path fill="currentColor" opacity="0.4" fill-rule="evenodd" clip-rule="evenodd"
+              d="M19.4894 5.5523C19.782 5.29229 20.2169 5.33445 20.4607 5.64646L19.9309
+              6.11724C20.4607 5.64646 20.4607 5.64646 20.4607 5.64646L20.4617 5.64781L20.4629
+              5.64933L20.4656 5.65286L20.4726 5.66195C20.4778 5.66891 20.4843 5.67767 20.492
+              5.68825C20.5073 5.7094 20.5273 5.73783 20.5513 5.77369C20.5994 5.8454 20.6634 5.94678
+              20.7378 6.07901C20.8866 6.34356 21.0769 6.73103 21.2642 7.25049C21.6396 8.29118 21.9998
+              9.85148 21.9998 12.0003C21.9998 14.1492 21.6396 15.7095 21.2642 16.7502C21.0769 17.2697
+              20.8866 17.6571 20.7378 17.9217C20.6634 18.0539 20.5994 18.1553 20.5513 18.227C20.5273
+              18.2629 20.5073 18.2913 20.492 18.3124C20.4843 18.323 20.4778 18.3318 20.4726
+              18.3387L20.4656 18.3478L20.4629 18.3514L20.4617 18.3529C20.4617 18.3529 20.4607 18.3542
+              19.9309 17.8834L20.4607 18.3542C20.2169 18.6662 19.782 18.7084 19.4894 18.4484C19.1982
+              18.1896 19.1576 17.7291 19.3976 17.4172C19.3976 17.4172 19.3992 17.4149 19.4008
+              17.4128C19.4056 17.4061 19.4153 17.3926 19.429 17.3721C19.4563 17.3312 19.5001 17.2626
+              19.555 17.165C19.6648 16.9699 19.8194 16.6588 19.9769 16.2222C20.2911 15.3509 20.6205
+              13.9696 20.6205 12.0003C20.6205 10.031 20.2911 8.64979 19.9769 7.77847C19.8194 7.34192
+              19.6648 7.03077 19.555 6.83571C19.5001 6.73813 19.4563 6.66945 19.429 6.62856C19.4153
+              6.60811 19.4056 6.5946 19.4008 6.58789C19.3992 6.58572 19.3976 6.58351 19.3976
+              6.58351" />
+            <path fill="currentColor" opacity="0.7" fill-rule="evenodd" clip-rule="evenodd"
+              d="M17.7572 8.41592C18.0902 8.21868 18.51 8.34659 18.695 8.70163L18.0921
+              9.05876C18.695 8.70163 18.695 8.70163 18.695 8.70163L18.6957 8.70291L18.6964
+              8.70428L18.6979 8.70727L18.7014 8.71425L18.7103 8.73224C18.717 8.74604 18.7251 8.76345
+              18.7345 8.78454C18.7534 8.82672 18.7772 8.88359 18.8043 8.95571C18.8584 9.1 18.9252
+              9.30487 18.9901 9.57473C19.12 10.1149 19.2415 10.9118 19.2415 12.0003C19.2415 13.0888
+              19.12 13.8857 18.9901 14.4259C18.9252 14.6958 18.8584 14.9006 18.8043 15.0449C18.7772
+              15.117 18.7534 15.1739 18.7345 15.2161C18.7251 15.2372 18.717 15.2546 18.7103
+              15.2684L18.7014 15.2864L18.6979 15.2934L18.6964 15.2963L18.6957 15.2977C18.6957 15.2977
+              18.695 15.299 18.0921 14.9419L18.695 15.299C18.51 15.654 18.0902 15.782 17.7572
+              15.5847C17.4271 15.3891 17.3063 14.9474 17.4846 14.5938L17.4892 14.5838C17.4955 14.5696
+              17.5076 14.5415 17.5236 14.4987C17.5557 14.4132 17.6039 14.2687 17.654 14.0606C17.754
+              13.6448 17.8622 12.9709 17.8622 12.0003C17.8622 11.0297 17.754 10.3558 17.654
+              9.94003C17.6039 9.73189 17.5557 9.58745 17.5236 9.50194C17.5076 9.45915 17.4955 9.43099
+              17.4892 9.41687L17.4846 9.40684C17.3063 9.05328 17.4271 8.61149 17.7572 8.41592Z" />
+          </svg>
+        </span>
+        <span class="sheet-label">Sound effects</span>
+        <span class="switch" aria-hidden="true"><i></i></span>
+      </button>
+
+      <button class="sheet-row" id="restart">
+        <span class="sheet-ico sheet-ico-text">↺</span>
+        <span class="sheet-label">Start a new cat</span>
+      </button>
+
+      <p class="sheet-keys">← → move between categories</p>
+
+      <!-- Privacy Policy / Terms links belong here and are one of the few outbound links
+           CrazyGames permits — but only once they point at pages that actually exist.
+           The placeholders that used to sit here were dead links, so they are gone until
+           there are real ones to link to. -->
+
+      <button class="sheet-close" id="sheetClose">Close</button>
+    </dialog>
+
+    <div class="boot" id="boot">
+      <div class="boot-card">
+        <div class="boot-logo">
+          <img class="logo-img" src="./src/logo.png" alt="MeowMaker" onerror="this.remove()" />
+          <span class="logo-text"><span class="logo-a">MEOW</span><span class="logo-b">MAKER</span></span>
+        </div>
+        <div class="boot-sub" id="bootSub">Loading parts…</div>
+        <div class="bar"><div class="bar-fill" id="bootBar"></div></div>
+        <div class="boot-row">
+          <span class="boot-count" id="bootCount">0 / 0</span>
+        </div>
+        <!-- only shown when a half-built cat is waiting in storage -->
+        <div class="boot-choice" id="bootChoice" hidden>
+          <button class="primary" id="bootContinue">▶ Continue</button>
+          <button id="bootFresh">✨ Start fresh</button>
+        </div>
+      </div>
+    </div>
+    <!-- CrazyGames SDK: loaded ahead of the module so window.CrazyGames exists by the
+         time main.js runs. It is only reachable on the portal — everywhere else this
+         404s or is blocked, and the game carries on without it. -->
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <script type="module" src="./src/main.js"></script>
+  </body>
+</html>

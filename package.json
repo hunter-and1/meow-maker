@@ -1,0 +1,17 @@
+{
+  "name": "meowmaker",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "manifest": "node scripts/build-manifest.mjs",
+    "predev": "npm run manifest",
+    "dev": "vite --host",
+    "prebuild": "npm run manifest",
+    "build": "vite build",
+    "preview": "vite preview --host"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  }
+}
