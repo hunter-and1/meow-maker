@@ -139,8 +139,8 @@ body::before {
   grid-column: 2;
 }
 
-/* the counterweight to the settings key — empty, and that is the whole job */
-.topbar-slot {
+/* the counterweight to the settings key */
+#topRestart {
   grid-column: 1;
   width: 44px;
   height: 44px;
@@ -190,6 +190,11 @@ body::before {
    stroke with built-in margin — padding evens the two out */
 #settings .icon-glyph {
   padding: 7px;
+}
+
+/* the restart arrow is a stroke like the camera, but drawn tighter to its viewBox edge */
+#topRestart .icon-glyph {
+  padding: 6px;
 }
 
 .icon-btn.pending {
@@ -1010,11 +1015,6 @@ button.primary {
   width: 100%;
   height: 100%;
   display: block;
-}
-
-.sheet-ico-text {
-  font-size: 1.1rem;
-  line-height: 1;
 }
 
 /* Off: the mark dims and gains a slash. The bar carries a shadow in the row's own

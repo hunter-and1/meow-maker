@@ -11,9 +11,25 @@ npm run build    # -> dist/
 
 ## Shipping to CrazyGames
 
-The build targets a **Basic Implementation** launch: no SDK, no ads, no accounts, no
-purchases. What that costs the code, and what not to undo:
+The build targets a **Basic Implementation** launch: no ads, no accounts, no purchases.
+The SDK covers the game and data modules, behind the facade in `src/sdk.js` — off the
+portal `window.CrazyGames` is absent and every call there is a no-op. What that costs the
+code, and what not to undo:
 
+- **`gameplayStart` / `gameplayStop` are mandatory.** Submission QA fails on "First
+  gameplay start" without them, and the first start is what times the initial download, so
+  it has to fire when the boot screen clears — not when the script runs. `syncGameplay()`
+  in `src/main.js` derives the state (booted, sheet shut, tab visible) instead of firing
+  the two by hand, so the pair can't fall out of step. `loadingStart` / `loadingStop`
+  bracket the part preload; `happytime` fires on the two wins — the run completing and the
+  photo saving.
+- **Save data goes through `SDK.data`, not `localStorage`.** Inside the CrazyGames app the
+  iframe's own localStorage isn't persisted, so a cat saved there is gone by the next
+  session. `storage` in `src/sdk.js` is the only way the game touches either, and it latches
+  one backend on first use — reading one and writing the other would strand the save and
+  hand out duplicate mint numbers. That is why the whole boot block waits on `sdkReady`
+  before it reads a byte: `SDK.data` doesn't exist until `init()` resolves. `sdkReady`
+  never rejects and gives up after 3s, so a dead SDK can't cost the game its boot.
 - **Every path is relative.** CrazyGames serves the bundle from a nested CDN path
   (`…/game-files.crazygames.com/<slug>/<build>/index.html`), where a leading `/` resolves
   against the CDN root and 404s. `vite.config.js` sets `base: './'` for everything Vite

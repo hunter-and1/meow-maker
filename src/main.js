@@ -1,6 +1,7 @@
 import './style.css';
 import manifest from './manifest.json';
 import { sfx } from './sfx.js';
+import { game, onPortalMute, sdkReady, storage } from './sdk.js';
 
 const SIZE = 500; // every part is authored on a 500x500 grid
 const HEAD = '06-head'; // used as a ghost backdrop in part thumbnails
@@ -158,7 +159,7 @@ const CODE_V = '6'; // shared links carry it, so a reorder can't silently restor
  */
 function persist() {
   const state = { code: encode(), at: activeId(), reached: steps[reached].id, finished };
-  localStorage.setItem(STORE, JSON.stringify(state));
+  storage.setItem(STORE, JSON.stringify(state));
   history.replaceState(null, '', `?a=${CODE_V}~${state.code}#${activeId()}`);
 }
 
@@ -177,8 +178,14 @@ function restore() {
     return (fromLink = true);
   }
   try {
-    const saved = JSON.parse(localStorage.getItem(STORE) ?? 'null');
-    if (!saved?.code || !decode(saved.code)) return false;
+    const saved = JSON.parse(storage.getItem(STORE) ?? 'null');
+    if (!saved?.code) return false;
+    // a code from a pool that has since been re-cut can't be worn; drop it rather than
+    // leave a run behind that every future boot will read and reject again
+    if (!decode(saved.code)) {
+      storage.removeItem(STORE);
+      return false;
+    }
     finished = saved.finished === true;
     reached = finished ? LAST : stepOf(saved.reached);
     step = Math.min(stepOf(saved.at), reached);
@@ -257,6 +264,7 @@ function nextStep() {
   if (finished) return; // already done; the camera is the way out
   finished = true;
   sfx.done();
+  if (!isBlank()) game.happytime(); // the run is complete — the portal's cue to celebrate
   commit();
   toast(isBlank() ? 'Nothing picked yet — go back and dress your cat' : 'Your cat is ready — tap 📷 to save');
 }
@@ -274,15 +282,17 @@ function nextStep() {
 const MINTS = `${STORE}:mints`;
 const MINT_CAP = 400; // plates the device remembers; the oldest fall off first
 
-const mint = (() => {
+// loaded in boot() rather than here: storage can't be read until the SDK has settled
+let mint = { next: 1, book: {} };
+
+function loadMints() {
   try {
-    const saved = JSON.parse(localStorage.getItem(MINTS) ?? 'null');
-    if (Number.isInteger(saved?.next)) return { next: saved.next, book: saved.book ?? {} };
+    const saved = JSON.parse(storage.getItem(MINTS) ?? 'null');
+    if (Number.isInteger(saved?.next)) mint = { next: saved.next, book: saved.book ?? {} };
   } catch {
     /* corrupt or cleared storage just starts the collection over */
   }
-  return { next: 1, book: {} };
-})();
+}
 
 /** The number this outfit already owns, or a fresh one when the player made it. */
 function mintNumber(code, issue) {
@@ -292,7 +302,7 @@ function mintNumber(code, issue) {
   mint.book[code] = mint.next++;
   const codes = Object.keys(mint.book);
   for (const old of codes.slice(0, codes.length - MINT_CAP)) delete mint.book[old];
-  localStorage.setItem(MINTS, JSON.stringify(mint));
+  storage.setItem(MINTS, JSON.stringify(mint));
   return mint.book[code];
 }
 
@@ -523,6 +533,7 @@ async function download(button) {
       img.onerror = reject;
       img.src = url;
     });
+    game.happytime(); // the cat made it out as a picture, which is the win here
     toast('Photo saved 📷');
   });
 }
@@ -607,8 +618,9 @@ const MUTED = `${STORE}:muted`;
 const SILENT = `${STORE}:silent`; // the effects switch, remembered apart from the music one
 const music = $('music');
 const sheet = $('settingsSheet');
-let muted = localStorage.getItem(MUTED) === '1';
-let silent = localStorage.getItem(SILENT) === '1';
+// both read from storage in boot(), for the same reason the mint book is
+let muted = false;
+let silent = false;
 // CrazyGames has its own mute control in the portal chrome, and it is a separate switch
 // from the one in the sheet: it silences the game without touching — or being visible in
 // — the player's own preference, so the two are kept apart and OR'd together.
@@ -617,7 +629,7 @@ let portalMuted = false;
 music.volume = 0.35; // a loop that plays for an hour has to sit under the UI
 
 function applyMusic() {
-  localStorage.setItem(MUTED, muted ? '1' : '0');
+  storage.setItem(MUTED, muted ? '1' : '0');
   // aria-pressed is the whole state: the stylesheet strikes the icon through from it
   $('musicToggle').setAttribute('aria-pressed', String(!muted));
   if (muted || portalMuted) return music.pause();
@@ -634,7 +646,9 @@ function applyMusic() {
  * quietly re-arms the loop on the first interaction after any interruption.
  */
 function resumeMusic() {
-  if (muted || portalMuted || !music.paused) return;
+  // the saved mute preference isn't read until boot() — starting the loop before that
+  // plays music at someone who switched it off last session
+  if (!booted || muted || portalMuted || !music.paused) return;
   music.play().catch(() => {
     /* not a qualifying gesture yet — the next one will do */
   });
@@ -648,12 +662,18 @@ for (const event of ['pointerdown', 'touchend', 'keydown']) {
 // it loses to the gesture requirement and the listeners above pick it up instead
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') resumeMusic();
+  syncGameplay(); // a backgrounded tab is not gameplay, and ads background us
 });
 
-$('settings').onclick = () => sheet.showModal();
+$('settings').onclick = () => {
+  sheet.showModal();
+  syncGameplay(); // the sheet is a pause as far as the portal is concerned
+};
 $('sheetClose').onclick = () => sheet.close();
 // clicking the backdrop lands on the dialog itself, never on its contents
 sheet.onclick = (e) => e.target === sheet && sheet.close();
+// one listener for every way out of the dialog, Escape included
+sheet.addEventListener('close', syncGameplay);
 
 $('musicToggle').onclick = () => {
   muted = !muted;
@@ -666,7 +686,7 @@ $('musicToggle').onclick = () => {
  * portal's mute outranks both, since it is also what plays during ads.
  */
 function applySound() {
-  localStorage.setItem(SILENT, silent ? '1' : '0');
+  storage.setItem(SILENT, silent ? '1' : '0');
   $('soundToggle').setAttribute('aria-pressed', String(!silent));
   sfx.setMuted(silent || portalMuted);
 }
@@ -677,38 +697,24 @@ $('soundToggle').onclick = () => {
   if (!silent) sfx.pick(); // hearing it back is the confirmation
 };
 
-applyMusic();
-applySound();
-
 /**
- * CrazyGames mutes games from its own player chrome — and does it during video ads, which
- * the platform requires games to honour so the ad audio is never talked over. The portal
- * hands that state to us as game.settings.muteAudio, once at startup and again on every
- * change. Outside the portal (local dev, or any host where the SDK script does not load)
- * window.CrazyGames is simply absent and the game keeps its own mute switch as the only
- * one that matters.
+ * gameplayStart / gameplayStop have to alternate, so nothing fires them by hand: the state
+ * is derived from the three things that decide it — the boot screen is gone, the settings
+ * sheet is shut, and the tab is in front — and only a change is reported.
  */
-(async () => {
-  const sdk = window.CrazyGames?.SDK;
-  if (!sdk) return;
-  try {
-    await sdk.init();
-  } catch {
-    return; // SDK present but unusable — the local mute toggle still works on its own
-  }
-  const syncPortalMute = (settings) => {
-    portalMuted = Boolean(settings?.muteAudio);
-    applyMusic();
-    applySound();
-  };
-  syncPortalMute(sdk.game.settings);
-  sdk.game.addSettingsChangeListener(syncPortalMute);
-})();
+let booted = false;
+let playing = false;
 
-// throwing a cat away is only reachable from inside the sheet, so it takes a deliberate
-// trip through Settings rather than one stray tap on the topbar
-$('restart').onclick = () => {
-  sheet.close();
+function syncGameplay() {
+  const active = booted && !sheet.open && document.visibilityState === 'visible';
+  if (active === playing) return;
+  playing = active;
+  if (active) game.gameplayStart();
+  else game.gameplayStop();
+}
+
+// throwing a cat away lives in the topbar key on the left, and nowhere else
+$('topRestart').onclick = () => {
   resetBuild();
   commit({ regrid: true });
   toast('Fresh cat — start styling');
@@ -729,6 +735,9 @@ window.addEventListener(
     if (e.metaKey || e.ctrlKey || e.altKey) return; // browser shortcuts stay the browser's
     if (HELD_KEYS.has(e.code)) e.preventDefault();
     if (sheet.open) return; // the dialog's own buttons own the keyboard while it's up
+    // the boot screen swallows taps by covering the page, but not keys: an arrow pressed
+    // while it is still up would walk a run that has not been restored from storage yet
+    if (!booted) return;
     if (e.code === 'ArrowRight') nextStep();
     if (e.code === 'ArrowLeft') goStep(step - 1);
   },
@@ -786,8 +795,8 @@ async function preloadAll(onProgress) {
 const SEEN = `${STORE}:seen`;
 
 function showFirstRunHint() {
-  if (localStorage.getItem(SEEN) === '1') return;
-  localStorage.setItem(SEEN, '1');
+  if (storage.getItem(SEEN) === '1') return;
+  storage.setItem(SEEN, '1');
   setTimeout(() => toast('Tap a part to wear it, then Next ▶'), 500);
 }
 
@@ -808,6 +817,8 @@ async function runBootScreen({ resume = false } = {}) {
     dismissed = true;
     boot.classList.add('done');
     setTimeout(() => boot.remove(), 350);
+    booted = true;
+    syncGameplay(); // loading is over — this is the first gameplayStart the portal wants
     showFirstRunHint();
   };
 
@@ -821,10 +832,14 @@ async function runBootScreen({ resume = false } = {}) {
     };
   }
 
+  // the portal is told the bar on screen is ours, so a long preload does not read as a
+  // stalled game — and so the download it measures ends where loading actually ends
+  game.loadingStart();
   const total = await preloadAll((n, all) => {
     bar.style.width = `${(n / all) * 100}%`;
     count.textContent = `${n} / ${all}`;
   });
+  game.loadingStop();
 
   if (resume) {
     $('bootSub').textContent = 'You have a cat in progress.';
@@ -837,12 +852,38 @@ async function runBootScreen({ resume = false } = {}) {
 
 /* ------------------------------------------------------------------ boot */
 
-const fromHash = steps.findIndex((l) => l.id === decodeURIComponent(location.hash.slice(1)));
-const restored = restore();
-if (!restored) resetBuild();
-// an explicit #category in the URL wins, as long as the run has already got there
-if (fromHash > -1 && fromHash <= reached) step = fromHash;
-commit({ regrid: true, issue: !fromLink });
-// someone else's shared cat is not the player's run to resume, and a run still on its
-// first category has nothing worth asking about — both skip straight into the game
-runBootScreen({ resume: restored && !fromLink && (reached > 0 || finished) });
+/**
+ * Nothing is read from storage before the SDK has settled. On the portal the save data
+ * lives in SDK.data rather than localStorage, and that module only exists after init() —
+ * so a read that jumped the gun would come back empty, and the write that followed would
+ * strand the player's cat in whichever store it landed in. sdkReady never rejects and
+ * gives up after a few seconds, so the wait can't cost the game its boot.
+ */
+(async () => {
+  await sdkReady;
+
+  loadMints();
+  muted = storage.getItem(MUTED) === '1';
+  silent = storage.getItem(SILENT) === '1';
+  applyMusic();
+  applySound();
+
+  // strictly after the two switches are read: this fires its handler straight away, and
+  // applyMusic writes the preference back out — before the read that would be a default
+  // stamped over whatever the player had chosen
+  onPortalMute((portal) => {
+    portalMuted = portal;
+    applyMusic();
+    applySound();
+  });
+
+  const fromHash = steps.findIndex((l) => l.id === decodeURIComponent(location.hash.slice(1)));
+  const restored = restore();
+  if (!restored) resetBuild();
+  // an explicit #category in the URL wins, as long as the run has already got there
+  if (fromHash > -1 && fromHash <= reached) step = fromHash;
+  commit({ regrid: true, issue: !fromLink });
+  // someone else's shared cat is not the player's run to resume, and a run still on its
+  // first category has nothing worth asking about — both skip straight into the game
+  runBootScreen({ resume: restored && !fromLink && (reached > 0 || finished) });
+})();

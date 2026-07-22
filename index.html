@@ -16,12 +16,20 @@
   <body>
     <main class="app">
       <header class="topbar">
-        <!-- An empty key, purely to balance the settings button so the wordmark stays
-             optically centred. This slot has held a Home link and a restart key in turn;
-             both are gone — the game ships inside a CrazyGames iframe, where navigating
-             away from index.html is broken and disallowed, and restarting lives in the
-             settings sheet where an accidental tap can't wipe a cat mid-build. -->
-        <div class="topbar-slot" aria-hidden="true"></div>
+        <!-- Restart, in the left key that balances the settings button so the wordmark
+             stays optically centred. A Home link used to live here and is gone for good —
+             the game ships inside a CrazyGames iframe, where navigating away from
+             index.html is broken and disallowed. -->
+        <button class="icon-btn" id="topRestart" title="Start a new cat"
+          aria-label="Start a new cat">
+          <svg class="icon-glyph" viewBox="0 0 24 24" aria-hidden="true">
+            <g fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
+              stroke-linejoin="round">
+              <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+              <path d="M20 4v4.5h-4.5" />
+            </g>
+          </svg>
+        </button>
         <!-- swap the artwork at src/logo.png; it is bundled rather than served from
              public/ so the stylesheet can mask the wordmark with the same file -->
         <h1 class="logo">
@@ -170,11 +178,6 @@
         </span>
         <span class="sheet-label">Sound effects</span>
         <span class="switch" aria-hidden="true"><i></i></span>
-      </button>
-
-      <button class="sheet-row" id="restart">
-        <span class="sheet-ico sheet-ico-text">↺</span>
-        <span class="sheet-label">Start a new cat</span>
       </button>
 
       <p class="sheet-keys">← → move between categories</p>
